@@ -1,0 +1,52 @@
+﻿{
+  "name": "FIM Defacement Containment",
+  "description": "Triggered by Wazuh FIM rules 550 and 554. Creates TheHive alert and sends Slack notification when a monitored file is modified.",
+  "trigger": {
+    "type": "webhook",
+    "source": "wazuh",
+    "rules": ["550", "554"],
+    "condition": "rule.groups contains syscheck"
+  },
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook Trigger",
+      "type": "trigger",
+      "description": "Receives Wazuh FIM alert JSON"
+    },
+    {
+      "id": "2",
+      "name": "Extract Alert Fields",
+      "type": "action",
+      "description": "Parse agent name, file path, rule ID, timestamp from alert"
+    },
+    {
+      "id": "3",
+      "name": "Create TheHive Alert",
+      "type": "http",
+      "method": "POST",
+      "url": "http://thehive:9000/api/v1/alert",
+      "description": "Create case in TheHive with file modification details",
+      "body": {
+        "title": "FIM Alert: File modified on ${agent_name}",
+        "description": "Wazuh detected unauthorised file modification.\nFile: ${file_path}\nRule: ${rule_id}\nAgent: ${agent_name}",
+        "type": "External",
+        "source": "Wazuh",
+        "severity": 2,
+        "tags": ["FIM", "T1565", "nexashield"]
+      }
+    },
+    {
+      "id": "4",
+      "name": "Slack Notification",
+      "type": "http",
+      "method": "POST",
+      "description": "Alert SOC analyst via Slack webhook",
+      "body": {
+        "text": "FIM ALERT: File modified on ${agent_name}\nFile: ${file_path}\nTime: ${timestamp}\nTheHive case created."
+      }
+    }
+  ],
+  "validated": true,
+  "evidence": "docs/screenshots/11-fim/"
+}

@@ -1,0 +1,63 @@
+﻿{
+  "name": "MFA Lockout Cascade",
+  "description": "Triggered by Wazuh rule 100003 (Keycloak brute force - 5 failures in 120 seconds). Disables Keycloak user, creates TheHive case, notifies analyst.",
+  "trigger": {
+    "type": "webhook",
+    "source": "wazuh",
+    "rules": ["100001", "100002", "100003"],
+    "condition": "rule.id = 100003"
+  },
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook Trigger",
+      "type": "trigger",
+      "description": "Receives Wazuh Keycloak brute force alert"
+    },
+    {
+      "id": "2",
+      "name": "Extract username and source IP",
+      "type": "action",
+      "description": "Parse userId and srcip from alert data"
+    },
+    {
+      "id": "3",
+      "name": "Disable Keycloak User",
+      "type": "http",
+      "method": "PUT",
+      "url": "http://keycloak:8080/admin/realms/Nexashield/users/${user_id}",
+      "description": "Set enabled=false on the targeted Keycloak account",
+      "body": {
+        "enabled": false
+      }
+    },
+    {
+      "id": "4",
+      "name": "Create TheHive Alert",
+      "type": "http",
+      "method": "POST",
+      "url": "http://thehive:9000/api/v1/alert",
+      "description": "Create case with brute force details and containment action taken",
+      "body": {
+        "title": "Keycloak Brute Force: ${username} targeted from ${src_ip}",
+        "description": "5 failed MFA attempts detected in 120 seconds.\nUser: ${username}\nSource: ${src_ip}\nAction taken: Keycloak account disabled automatically.",
+        "type": "External",
+        "source": "Wazuh",
+        "severity": 3,
+        "tags": ["Keycloak", "T1110.001", "MFA", "contained", "nexashield"]
+      }
+    },
+    {
+      "id": "5",
+      "name": "Slack Notification",
+      "type": "http",
+      "method": "POST",
+      "description": "Notify SOC analyst of automated containment",
+      "body": {
+        "text": "MFA BRUTE FORCE CONTAINED\nUser ${username} disabled in Keycloak.\nSource IP: ${src_ip}\nTheHive case created. Review and re-enable if false positive."
+      }
+    }
+  ],
+  "validated": true,
+  "custom_rules": "configs/wazuh/rules/local_rules.xml"
+}

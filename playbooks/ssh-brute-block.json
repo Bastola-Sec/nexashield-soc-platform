@@ -1,0 +1,54 @@
+﻿{
+  "name": "SSH Brute Force Block",
+  "description": "Triggered by Wazuh rule 5720 (SSH brute force). Creates TheHive case and blocks source IP via UFW active response.",
+  "trigger": {
+    "type": "webhook",
+    "source": "wazuh",
+    "rules": ["5710", "5712", "5720"],
+    "condition": "rule.groups contains authentication_failed"
+  },
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook Trigger",
+      "type": "trigger",
+      "description": "Receives Wazuh SSH brute force alert"
+    },
+    {
+      "id": "2",
+      "name": "Filter by severity",
+      "type": "condition",
+      "description": "Only continue if rule.level >= 7"
+    },
+    {
+      "id": "3",
+      "name": "Classify source IP",
+      "type": "action",
+      "description": "Check if source IP is internal (10.0.x.x) or external"
+    },
+    {
+      "id": "4",
+      "name": "Create TheHive Alert",
+      "type": "http",
+      "method": "POST",
+      "url": "http://thehive:9000/api/v1/alert",
+      "description": "Create case with attacker IP and targeted user",
+      "body": {
+        "title": "SSH Brute Force from ${src_ip}",
+        "description": "Wazuh detected SSH brute force attack.\nSource: ${src_ip}\nTarget: ${dst_user}\nAttempts: ${attempt_count}\nAgent: ${agent_name}",
+        "type": "External",
+        "source": "Wazuh",
+        "severity": 2,
+        "tags": ["SSH", "T1110", "brute-force", "nexashield"]
+      }
+    },
+    {
+      "id": "5",
+      "name": "Block IP via Wazuh Active Response",
+      "type": "action",
+      "description": "Trigger firewall-drop active response on the affected agent to block source IP"
+    }
+  ],
+  "validated": true,
+  "mttd": "under 8 seconds"
+}

@@ -1,0 +1,90 @@
+﻿{
+  "realm": "Nexashield",
+  "displayName": "NexaShield Consulting",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "maxDeltaTimeSeconds": 43200,
+  "quickLoginCheckMilliSeconds": 1000,
+  "requiredActions": [
+    {
+      "alias": "CONFIGURE_TOTP",
+      "name": "Configure OTP",
+      "providerId": "CONFIGURE_TOTP",
+      "enabled": true,
+      "defaultAction": true,
+      "priority": 10
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "shuffle",
+      "name": "Shuffle SOAR",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": [
+        "http://10.0.2.6:3001/*",
+        "http://10.0.2.6:3001/api/v1/docs/oauth2"
+      ],
+      "webOrigins": [
+        "http://10.0.2.6:3001"
+      ]
+    },
+    {
+      "clientId": "thehive",
+      "name": "TheHive Case Management",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "https://10.0.2.6:9443/*"
+      ]
+    },
+    {
+      "clientId": "nexashield-portal",
+      "name": "NexaShield Client Portal",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "https://172.16.2.24/*"
+      ]
+    }
+  ],
+  "components": {
+    "org.keycloak.storage.UserStorageProvider": [
+      {
+        "name": "NexaShield-AD",
+        "providerId": "ldap",
+        "config": {
+          "vendor": ["ad"],
+          "connectionUrl": ["ldap://10.0.5.2"],
+          "bindDn": ["CN=Keycloak Service,OU=Security,OU=NexaShield,DC=nexashield,DC=local"],
+          "usersDn": ["OU=NexaShield,DC=nexashield,DC=local"],
+          "usernameLDAPAttribute": ["sAMAccountName"],
+          "uuidLDAPAttribute": ["objectGUID"],
+          "userObjectClasses": ["person", "organizationalPerson", "user"],
+          "searchScope": ["2"],
+          "editMode": ["READ_ONLY"],
+          "syncRegistrations": ["false"],
+          "pagination": ["true"]
+        }
+      }
+    ]
+  }
+}
