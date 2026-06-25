@@ -1,0 +1,62 @@
+﻿# Credentials and secrets
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+.env
+.env.*
+secrets.txt
+credentials.txt
+*credentials*
+*password*
+*secret*
+.aws/credentials
+.aws/config
+.github_token
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+env/
+.venv/
+
+# Logs
+*.log
+logs/
+*.pcap
+*.cap
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Large binaries
+*.iso
+*.ova
+*.vmdk
+*.vdi
+*.qcow2
+
+# Office temp files
+~$*.docx
+~$*.xlsx
+~$*.pptx
+
+# Node
+node_modules/
+
+# Docker
+docker-compose.override.yml

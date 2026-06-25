@@ -1,0 +1,182 @@
+cat > ~/build-nexashield-vpc.sh << 'SCRIPT'
+#!/bin/bash
+# NexaShield VPC Build Script
+# Auto-discovers existing resources and continues setup
+# Safe to run multiple times — skips existing resources
+
+REGION="us-east-2"
+
+echo "=== NexaShield VPC Setup ==="
+
+# Helper function — get resource by tag name
+get_vpc() {
+  aws ec2 describe-vpcs --region $REGION \
+    --filters "Name=tag:Name,Values=nexashield-vpc" \
+    --query 'Vpcs[0].VpcId' --output text 2>/dev/null
+}
+
+get_igw() {
+  aws ec2 describe-internet-gateways --region $REGION \
+    --filters "Name=tag:Name,Values=nexashield-igw" \
+    --query 'InternetGateways[0].InternetGatewayId' \
+    --output text 2>/dev/null
+}
+
+get_subnet() {
+  aws ec2 describe-subnets --region $REGION \
+    --filters "Name=tag:Name,Values=$1" \
+    --query 'Subnets[0].SubnetId' --output text 2>/dev/null
+}
+
+get_rt() {
+  aws ec2 describe-route-tables --region $REGION \
+    --filters "Name=tag:Name,Values=nexashield-public-rt" \
+    --query 'RouteTables[0].RouteTableId' \
+    --output text 2>/dev/null
+}
+
+# ── Step 1: VPC ──────────────────────────────
+VPC_ID=$(get_vpc)
+if [ "$VPC_ID" = "None" ] || [ -z "$VPC_ID" ]; then
+  echo "Creating VPC..."
+  VPC_ID=$(aws ec2 create-vpc \
+    --cidr-block 172.16.0.0/16 \
+    --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=nexashield-vpc}]' \
+    --region $REGION \
+    --query 'Vpc.VpcId' --output text)
+  echo "✅ VPC created: $VPC_ID"
+else
+  echo "✅ VPC exists: $VPC_ID"
+fi
+
+# ── Step 2: DNS Hostnames ────────────────────
+aws ec2 modify-vpc-attribute \
+  --vpc-id $VPC_ID \
+  --enable-dns-hostnames
+echo "✅ DNS hostnames enabled"
+
+# ── Step 3: Internet Gateway ─────────────────
+IGW_ID=$(get_igw)
+if [ "$IGW_ID" = "None" ] || [ -z "$IGW_ID" ]; then
+  echo "Creating Internet Gateway..."
+  IGW_ID=$(aws ec2 create-internet-gateway \
+    --tag-specifications 'ResourceType=internet-gateway,Tags=[{Key=Name,Value=nexashield-igw}]' \
+    --region $REGION \
+    --query 'InternetGateway.InternetGatewayId' \
+    --output text)
+  aws ec2 attach-internet-gateway \
+    --internet-gateway-id $IGW_ID \
+    --vpc-id $VPC_ID
+  echo "✅ IGW created and attached: $IGW_ID"
+else
+  echo "✅ IGW exists: $IGW_ID"
+fi
+
+# ── Step 4: Public Subnet (DMZ) ──────────────
+PUBLIC_SUBNET=$(get_subnet "nexashield-public-dmz")
+if [ "$PUBLIC_SUBNET" = "None" ] || [ -z "$PUBLIC_SUBNET" ]; then
+  echo "Creating public subnet..."
+  PUBLIC_SUBNET=$(aws ec2 create-subnet \
+    --vpc-id $VPC_ID \
+    --cidr-block 172.16.1.0/24 \
+    --availability-zone ${REGION}a \
+    --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=nexashield-public-dmz}]' \
+    --region $REGION \
+    --query 'Subnet.SubnetId' --output text)
+  aws ec2 modify-subnet-attribute \
+    --subnet-id $PUBLIC_SUBNET \
+    --map-public-ip-on-launch
+  echo "✅ Public subnet created: $PUBLIC_SUBNET"
+else
+  echo "✅ Public subnet exists: $PUBLIC_SUBNET"
+fi
+
+# ── Step 5: Private Subnet (App) ─────────────
+PRIVATE_SUBNET=$(get_subnet "nexashield-private-app")
+if [ "$PRIVATE_SUBNET" = "None" ] || [ -z "$PRIVATE_SUBNET" ]; then
+  echo "Creating private subnet..."
+  PRIVATE_SUBNET=$(aws ec2 create-subnet \
+    --vpc-id $VPC_ID \
+    --cidr-block 172.16.2.0/24 \
+    --availability-zone ${REGION}a \
+    --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=nexashield-private-app}]' \
+    --region $REGION \
+    --query 'Subnet.SubnetId' --output text)
+  echo "✅ Private subnet created: $PRIVATE_SUBNET"
+else
+  echo "✅ Private subnet exists: $PRIVATE_SUBNET"
+fi
+
+# ── Step 6: Database Subnet (Isolated) ───────
+DB_SUBNET=$(get_subnet "nexashield-database-isolated")
+if [ "$DB_SUBNET" = "None" ] || [ -z "$DB_SUBNET" ]; then
+  echo "Creating database subnet..."
+  DB_SUBNET=$(aws ec2 create-subnet \
+    --vpc-id $VPC_ID \
+    --cidr-block 172.16.3.0/24 \
+    --availability-zone ${REGION}a \
+    --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=nexashield-database-isolated}]' \
+    --region $REGION \
+    --query 'Subnet.SubnetId' --output text)
+  echo "✅ Database subnet created: $DB_SUBNET"
+else
+  echo "✅ Database subnet exists: $DB_SUBNET"
+fi
+
+# ── Step 7: Public Route Table ────────────────
+PUBLIC_RT=$(get_rt)
+if [ "$PUBLIC_RT" = "None" ] || [ -z "$PUBLIC_RT" ]; then
+  echo "Creating public route table..."
+  PUBLIC_RT=$(aws ec2 create-route-table \
+    --vpc-id $VPC_ID \
+    --tag-specifications 'ResourceType=route-table,Tags=[{Key=Name,Value=nexashield-public-rt}]' \
+    --region $REGION \
+    --query 'RouteTable.RouteTableId' --output text)
+
+  # Add internet route
+  aws ec2 create-route \
+    --route-table-id $PUBLIC_RT \
+    --destination-cidr-block 0.0.0.0/0 \
+    --gateway-id $IGW_ID \
+    --region $REGION
+
+  # Associate with public subnet
+  aws ec2 associate-route-table \
+    --route-table-id $PUBLIC_RT \
+    --subnet-id $PUBLIC_SUBNET \
+    --region $REGION
+
+  echo "✅ Public route table created: $PUBLIC_RT"
+else
+  echo "✅ Public route table exists: $PUBLIC_RT"
+fi
+
+# ── Summary ───────────────────────────────────
+echo ""
+echo "================================"
+echo "NexaShield VPC Complete"
+echo "================================"
+echo "VPC:            $VPC_ID"
+echo "IGW:            $IGW_ID"
+echo "Public Subnet:  $PUBLIC_SUBNET"
+echo "Private Subnet: $PRIVATE_SUBNET"
+echo "DB Subnet:      $DB_SUBNET"
+echo "Public RT:      $PUBLIC_RT"
+echo "================================"
+
+# Save IDs for later use
+cat > ~/nexashield-vpc-ids.sh << EOF
+export VPC_ID=$VPC_ID
+export IGW_ID=$IGW_ID
+export PUBLIC_SUBNET=$PUBLIC_SUBNET
+export PRIVATE_SUBNET=$PRIVATE_SUBNET
+export DB_SUBNET=$DB_SUBNET
+export PUBLIC_RT=$PUBLIC_RT
+EOF
+
+echo "IDs saved to ~/nexashield-vpc-ids.sh"
+echo "Next session run: source ~/nexashield-vpc-ids.sh"
+SCRIPT
+
+chmod +x ~/build-nexashield-vpc.sh
+echo "Script ready — run it with: bash ~/build-nexashield-vpc.sh"

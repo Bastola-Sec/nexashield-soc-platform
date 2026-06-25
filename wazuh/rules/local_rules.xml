@@ -1,0 +1,35 @@
+﻿<!-- NexaShield Custom Detection Rules -->
+<!-- Location: /var/ossec/etc/rules/local_rules.xml -->
+
+<group name="nexashield,">
+
+  <!-- Keycloak failed login -->
+  <rule id="100001" level="7">
+    <decoded_as>json</decoded_as>
+    <field name="type">LOGIN_ERROR</field>
+    <description>Keycloak: Failed login attempt for user $(userId)</description>
+    <mitre>
+      <id>T1110</id>
+    </mitre>
+  </rule>
+
+  <!-- Keycloak MFA failure -->
+  <rule id="100002" level="10">
+    <decoded_as>json</decoded_as>
+    <field name="type">OTP_EXPIRED|INVALID_TOTP</field>
+    <description>Keycloak: MFA failure for user $(userId)</description>
+    <mitre>
+      <id>T1111</id>
+    </mitre>
+  </rule>
+
+  <!-- Keycloak brute force - 5 failures in 120 seconds -->
+  <rule id="100003" level="12" frequency="5" timeframe="120">
+    <if_matched_sid>100001</if_matched_sid>
+    <description>Keycloak: Brute force detected from $(srcip)</description>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+  </rule>
+
+</group>
